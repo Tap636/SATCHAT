@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Basic Real-Time Chat</title>
+    <style>
+        /* BASIC CSS (स्टाइलिंग) */
+        body { margin: 0; padding-bottom: 3rem; font-family: sans-serif; background-color: #f4f4f9; }
+        #login-area, #chat-area { padding: 20px; max-width: 600px; margin: 50px auto; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #login-area form input, #login-area form button { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        #login-area form button { background-color: #5cb85c; color: white; cursor: pointer; }
+        #messages { list-style-type: none; margin: 0; padding: 0; max-height: 400px; overflow-y: scroll; }
+        #messages li { padding: 8px 10px; border-bottom: 1px solid #eee; }
+        #messages li:nth-child(odd) { background: #f9f9f9; }
+        #form { background: #fff; padding: 10px; position: fixed; bottom: 0; left: 0; right: 0; display: flex; box-shadow: 0 -2px 5px rgba(0,0,0,0.1); }
+        #input { border: 1px solid #ccc; padding: 10px; flex-grow: 1; border-radius: 20px; margin-right: 10px; }
+        #form > button { background: #007bff; border: none; padding: 10px 15px; border-radius: 20px; color: white; cursor: pointer; }
+        .status { text-align: center; font-style: italic; color: #6c757d; padding: 5px; }
+    </style>
+</head>
+<body>
+    
+    <div id="login-area">
+        <h2>Login or Register</h2>
+        <form id="login-form">
+            <input id="login-username" placeholder="Username" required>
+            <input id="login-password" type="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+        <form id="register-form" style="margin-top: 15px;">
+            <input id="register-username" placeholder="New Username" required>
+            <input id="register-password" type="password" placeholder="New Password" required>
+            <button type="submit">Register</button>
+        </form>
+        <p id="auth-message" style="color: red;"></p>
+    </div>
+    
+    <div id="chat-area" style="display: none;">
+        <p>Welcome, <strong id="current-user"></strong>! <a href="#" id="logout-link">(Logout)</a></p>
+        <ul id="messages"></ul>
+        <form id="form">
+            <input id="input" autocomplete="off" placeholder="Type a message..." required />
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // क्लाइंट-साइड JAVASCRIPT
+        const socket = io();
+        const loginArea = document.getElementById('login-area');
+        const chatArea = document.getElementById('chat-area');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const messageForm = document.getElementById('form');
+        const messageInput = document.getElementById('input');
+        const messagesList = document.getElementById('messages');
+        const currentUserElement = document.getElementById('current-user');
+        const authMessage = document.getElementById('auth-message');
+        const logoutLink = document.getElementById('logout-link');
+
+        let userToken = localStorage.getItem('chatToken');
+        let currentUsername = localStorage.getItem('chatUsername');
+
+        // --- Utility Functions ---
+        function appendMessage(user, msg, isStatus = false) {
+            const item = document.createElement('li');
+            item.textContent = isStatus ? msg : ${user}: ${msg};
+            if (isStatus) item.classList.add('status');
+            messagesList.appendChild(item);
+            messagesList.scrollTop = messagesList.scrollHeight; // Scroll to bottom
+        }
+
+        function showChatArea(username) {
+            loginArea.style.display = 'none';
+            chatArea.style.display = 'block';
+            currentUserElement.textContent = username;
+        }
+
+        function showLoginArea() {
+            localStorage.removeItem('chatToken');
+            localStorage.removeItem('chatUsername');
+            userToken = null;
+            currentUsername = null;
+            messagesList.innerHTML = ''; // Clear chat
+            chatArea.style.display = 'none';
+            loginArea.style.display = 'block';
+        }
+
+        // --- Initial Load & Reconnect ---
+        if (userToken && currentUsername) {
+            // अगर पहले से टोकन है, तो सीधा चैट एरिया दिखाएँ और सर्वर को सूचित करें
+            showChatArea(currentUsername);
+            socket.emit('user login', { userId: 'CHECK_TOKEN_SERVER_SIDE', username: currentUsername });
+            
+            // पुरानी चैट हिस्ट्री लोड करें
+            fetch('/api/messages')
+                .then(res => res.json())
+                .then(msgs => {
+                    msgs.forEach(m => appendMessage(m.senderName, m.content));
+                });
+        }
+
+        // --- Authentication Logic ---
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                localStorage.setItem('chatToken', data.token);
+                localStorage.setItem('chatUsername', data.username);
+                userToken = data.token;
+                currentUsername = data.username;
+                showChatArea(currentUsername);
+                socket.emit('user login', { userId: 'TEMP_ID', username: currentUsername }); // Server needs to verify token here
+            } else {
+                authMessage.textContent = data.message || 'Login Failed';
+            }
+        });
+
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+
+            const response = await fetch('/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const data = await response.json();
+            authMessage.textContent = response.ok ? 'Registration Successful! Please Login.' : data.message || 'Registration Failed';
+        });
+
+        logoutLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            showLoginArea();
+            socket.disconnect(); // Socket disconnect
+            socket.connect(); // Reconnect for new login
+        });
+
+
+        // --- Message Sending Logic ---
+        messageForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (messageInput.value && userToken) {
+                socket.emit('chat message', messageInput.value);
+                messageInput.value = '';
+            } else if (!userToken) {
+                alert('Please log in to chat.');
+            }
+        });
+
+        // --- Receiving Messages ---
+        socket.on('chat message', function(data) {
+            appendMessage(data.user, data.msg);
+        });
+        
+        // --- Status Messages ---
+        socket.on('status message', function(msg) {
+            appendMessage('', msg, true);
+        });
+
+    </script>
+</body>
+</html>
