@@ -1,175 +1,283 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+
+<html lang="hi">
 <head>
-    <title>Basic Real-Time Chat</title>
-    <style>
-        /* BASIC CSS (स्टाइलिंग) */
-        body { margin: 0; padding-bottom: 3rem; font-family: sans-serif; background-color: #f4f4f9; }
-        #login-area, #chat-area { padding: 20px; max-width: 600px; margin: 50px auto; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        #login-area form input, #login-area form button { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        #login-area form button { background-color: #5cb85c; color: white; cursor: pointer; }
-        #messages { list-style-type: none; margin: 0; padding: 0; max-height: 400px; overflow-y: scroll; }
-        #messages li { padding: 8px 10px; border-bottom: 1px solid #eee; }
-        #messages li:nth-child(odd) { background: #f9f9f9; }
-        #form { background: #fff; padding: 10px; position: fixed; bottom: 0; left: 0; right: 0; display: flex; box-shadow: 0 -2px 5px rgba(0,0,0,0.1); }
-        #input { border: 1px solid #ccc; padding: 10px; flex-grow: 1; border-radius: 20px; margin-right: 10px; }
-        #form > button { background: #007bff; border: none; padding: 10px 15px; border-radius: 20px; color: white; cursor: pointer; }
-        .status { text-align: center; font-style: italic; color: #6c757d; padding: 5px; }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple E2E Chat (Single File)</title>
+  <style>
+    /* सरल CSS - मोबाइल-फ्रेंडली */
+    :root{--bg:#0f1724;--card:#111827;--accent:#0ea5a4;--muted:#9ca3af;}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans',sans-serif;background:linear-gradient(180deg,#071126 0%,#0b1220 100%);color:#e6eef6}
+    .app{max-width:900px;margin:20px auto;padding:18px}
+    .top{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+    .card{background:rgba(255,255,255,0.03);padding:12px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    input,textarea,button,select{font-size:14px}
+    .left{flex:1}
+    .controls{display:flex;gap:8px;align-items:center}
+    .chat-area{height:60vh;overflow:auto;padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);margin-top:12px}
+    .msg{padding:8px 12px;border-radius:10px;margin-bottom:8px;max-width:75%}
+    .me{background:linear-gradient(90deg,var(--accent),#06b6d4);color:#062024;margin-left:auto}
+    .them{background:rgba(255,255,255,0.04);color:var(--muted)}
+    .small{font-size:12px;color:var(--muted)}
+    .row{display:flex;gap:8px}
+    .pubkey-box{width:100%;height:80px;overflow:auto;padding:8px;background:#08111a;border-radius:8px}
+    .footer{display:flex;gap:8px;margin-top:12px}
+    .btn{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:#022;cursor:pointer}
+    .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .muted{color:var(--muted)}
+  </style>
 </head>
 <body>
-    
-    <div id="login-area">
-        <h2>Login or Register</h2>
-        <form id="login-form">
-            <input id="login-username" placeholder="Username" required>
-            <input id="login-password" type="password" placeholder="Password" required>
-            <button type="submit">Login</button>
-        </form>
-        <form id="register-form" style="margin-top: 15px;">
-            <input id="register-username" placeholder="New Username" required>
-            <input id="register-password" type="password" placeholder="New Password" required>
-            <button type="submit">Register</button>
-        </form>
-        <p id="auth-message" style="color: red;"></p>
-    </div>
-    
-    <div id="chat-area" style="display: none;">
-        <p>Welcome, <strong id="current-user"></strong>! <a href="#" id="logout-link">(Logout)</a></p>
-        <ul id="messages"></ul>
-        <form id="form">
-            <input id="input" autocomplete="off" placeholder="Type a message..." required />
-            <button type="submit">Send</button>
-        </form>
-    </div>
+  <div class="app card">
+    <div class="top">
+      <div class="left">
+        <div style="font-weight:700;font-size:18px">Single-file Chat — End-to-End Encrypted</div>
+        <div class="small">ब्राउज़र में ही कुंजी बनाई जाती है — संदेश AES-GCM से एन्क्रिप्ट होते हैं।</div>
+      </div>
+      <div style="text-align:right">
+        <div class="small">Persistent storage: <strong>LocalStorage</strong></div>
+        <div class="small">Security note: डिवाइस या ब्राउज़र compromised होने पर डेटा readable हो सकता है।</div>
+      </div>
+    </div><!-- Keys and key-exchange -->
+<div class="row" style="gap:12px;flex-wrap:wrap">
+  <div style="flex:1" class="card">
+    <div style="font-weight:600">User</div>
+    <div class="small">आपका नाम</div>
+    <input id="displayName" placeholder="Apna naam likho (eg. Sachchu)" style="width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit"/>
+    <div style="height:8px"></div>
+    <button id="genKeys" class="btn">Keypair Generate करो</button>
+    <button id="exportPub" class="btn secondary" style="display:none">Public Key Export (copy)</button>
+    <div style="height:6px"></div>
+    <div class="small">अगर दोस्त की public key मिली है — नीचे पेस्ट करके "Import" करो</div>
+    <textarea id="peerPubIn" placeholder="Friend की exported public key यहाँ पेस्ट करो" style="width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit"></textarea>
+    <div style="height:6px"></div>
+    <button id="importPeer" class="btn secondary">Import Peer Public Key</button>
+  </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        // क्लाइंट-साइड JAVASCRIPT
-        const socket = io();
-        const loginArea = document.getElementById('login-area');
-        const chatArea = document.getElementById('chat-area');
-        const loginForm = document.getElementById('login-form');
-        const registerForm = document.getElementById('register-form');
-        const messageForm = document.getElementById('form');
-        const messageInput = document.getElementById('input');
-        const messagesList = document.getElementById('messages');
-        const currentUserElement = document.getElementById('current-user');
-        const authMessage = document.getElementById('auth-message');
-        const logoutLink = document.getElementById('logout-link');
+  <div style="flex:1" class="card">
+    <div style="font-weight:600">Your exported Public Key</div>
+    <div class="pubkey-box" id="pubOut">(Keys नहीं बने)</div>
+    <div style="height:6px"></div>
+    <button id="copyPub" class="btn secondary" style="display:none">Copy to clipboard</button>
+  </div>
+</div>
 
-        let userToken = localStorage.getItem('chatToken');
-        let currentUsername = localStorage.getItem('chatUsername');
+<!-- Chat area -->
+<div class="chat-area card" id="chatArea"></div>
 
-        // --- Utility Functions ---
-        function appendMessage(user, msg, isStatus = false) {
-            const item = document.createElement('li');
-            item.textContent = isStatus ? msg : ${user}: ${msg};
-            if (isStatus) item.classList.add('status');
-            messagesList.appendChild(item);
-            messagesList.scrollTop = messagesList.scrollHeight; // Scroll to bottom
-        }
+<div class="footer">
+  <input id="msgInput" placeholder="Message likho..." style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit" />
+  <button id="sendBtn" class="btn">Send</button>
+  <button id="backupBtn" class="btn secondary">Backup (Download JSON)</button>
+  <button id="restoreBtn" class="btn secondary">Restore (Upload)</button>
+  <input id="fileIn" type="file" style="display:none" />
+</div>
 
-        function showChatArea(username) {
-            loginArea.style.display = 'none';
-            chatArea.style.display = 'block';
-            currentUserElement.textContent = username;
-        }
+<div style="height:8px"></div>
+<div class="small muted">Instructions: दोनों users अपनी public keys export करके एक-दूसरे को दें (copy-paste)। फिर दोनों import कर लें — इससे shared AES key बन जाएगी और messages encrypt/decrypt होंगे।</div>
+<div class="small muted">Limitations: यह single-file solution है — असली multi-device delivery के लिए आपको एक backend (server) चाहिए जो encrypted payload को भेजे और persist करे — पर payload खुद encrypted रहेगा।</div>
 
-        function showLoginArea() {
-            localStorage.removeItem('chatToken');
-            localStorage.removeItem('chatUsername');
-            userToken = null;
-            currentUsername = null;
-            messagesList.innerHTML = ''; // Clear chat
-            chatArea.style.display = 'none';
-            loginArea.style.display = 'block';
-        }
+  </div><script>
+// Single-file E2E chat demo (Hindi comments)
+// - Uses ECDH (P-256) to derive shared AES-GCM key
+// - Stores encrypted messages in localStorage so data delete न हो (जब तक ब्राउज़र साफ न करें)
 
-        // --- Initial Load & Reconnect ---
-        if (userToken && currentUsername) {
-            // अगर पहले से टोकन है, तो सीधा चैट एरिया दिखाएँ और सर्वर को सूचित करें
-            showChatArea(currentUsername);
-            socket.emit('user login', { userId: 'CHECK_TOKEN_SERVER_SIDE', username: currentUsername });
-            
-            // पुरानी चैट हिस्ट्री लोड करें
-            fetch('/api/messages')
-                .then(res => res.json())
-                .then(msgs => {
-                    msgs.forEach(m => appendMessage(m.senderName, m.content));
-                });
-        }
+const genKeysBtn = document.getElementById('genKeys');
+const exportPubBtn = document.getElementById('exportPub');
+const pubOut = document.getElementById('pubOut');
+const copyPub = document.getElementById('copyPub');
+const importPeerBtn = document.getElementById('importPeer');
+const peerPubIn = document.getElementById('peerPubIn');
+const chatArea = document.getElementById('chatArea');
+const sendBtn = document.getElementById('sendBtn');
+const msgInput = document.getElementById('msgInput');
+const displayName = document.getElementById('displayName');
+const backupBtn = document.getElementById('backupBtn');
+const restoreBtn = document.getElementById('restoreBtn');
+const fileIn = document.getElementById('fileIn');
 
-        // --- Authentication Logic ---
+let myKeyPair = null; // CryptoKeyPair
+let myPubRawB64 = null;
+let peerPublicKey = null; // CryptoKey
+let sharedAesKey = null; // CryptoKey for AES-GCM
 
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('login-username').value;
-            const password = document.getElementById('login-password').value;
+const STORAGE_KEY = 'e2e_chat_messages_v1';
 
-            const response = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
+// helper: arrayBuffer <-> base64
+function bufToB64(buf){
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i=0;i<bytes.byteLength;i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+function b64ToBuf(b64){
+  const binary = atob(b64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i=0;i<len;i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
 
-            const data = await response.json();
-            if (response.ok) {
-                localStorage.setItem('chatToken', data.token);
-                localStorage.setItem('chatUsername', data.username);
-                userToken = data.token;
-                currentUsername = data.username;
-                showChatArea(currentUsername);
-                socket.emit('user login', { userId: 'TEMP_ID', username: currentUsername }); // Server needs to verify token here
-            } else {
-                authMessage.textContent = data.message || 'Login Failed';
-            }
-        });
+async function generateKeypair(){
+  myKeyPair = await window.crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    ['deriveKey']
+  );
+  const pubRaw = await window.crypto.subtle.exportKey('raw', myKeyPair.publicKey);
+  myPubRawB64 = bufToB64(pubRaw);
+  pubOut.textContent = myPubRawB64;
+  exportPubBtn.style.display = 'inline-block';
+  copyPub.style.display = 'inline-block';
+  localStorage.setItem('e2e_my_pub_b64', myPubRawB64);
+}
 
-        registerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('register-username').value;
-            const password = document.getElementById('register-password').value;
+genKeysBtn.addEventListener('click', async ()=>{
+  await generateKeypair();
+  alert('Keypair generated. Public key export कर के friend को भेजें.');
+});
 
-            const response = await fetch('/api/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
+exportPubBtn.addEventListener('click', ()=>{
+  navigator.clipboard.writeText(myPubRawB64).then(()=>alert('Public key copied to clipboard'))
+});
+copyPub.addEventListener('click', ()=>{navigator.clipboard.writeText(myPubRawB64)});
 
-            const data = await response.json();
-            authMessage.textContent = response.ok ? 'Registration Successful! Please Login.' : data.message || 'Registration Failed';
-        });
+async function importPeerPublic(b64){
+  try{
+    const buf = b64ToBuf(b64);
+    const pub = await window.crypto.subtle.importKey(
+      'raw', buf,
+      { name: 'ECDH', namedCurve: 'P-256' },
+      true,
+      []
+    );
+    peerPublicKey = pub;
+    await deriveSharedKey();
+    alert('Peer public key imported — shared key derived. अब messages encrypt/decrypt होंगे.');
+    renderChat();
+  }catch(e){
+    console.error(e);
+    alert('Import failed — public key सही नहीं लग रही');
+  }
+}
 
-        logoutLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            showLoginArea();
-            socket.disconnect(); // Socket disconnect
-            socket.connect(); // Reconnect for new login
-        });
+importPeerBtn.addEventListener('click', async ()=>{
+  const txt = peerPubIn.value.trim();
+  if(!txt){alert('Peer public key paste करो');return}
+  await importPeerPublic(txt);
+});
 
+async function deriveSharedKey(){
+  if(!myKeyPair || !peerPublicKey) throw new Error('keys missing');
+  sharedAesKey = await window.crypto.subtle.deriveKey(
+    { name: 'ECDH', public: peerPublicKey },
+    myKeyPair.privateKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt','decrypt']
+  );
+}
 
-        // --- Message Sending Logic ---
-        messageForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            if (messageInput.value && userToken) {
-                socket.emit('chat message', messageInput.value);
-                messageInput.value = '';
-            } else if (!userToken) {
-                alert('Please log in to chat.');
-            }
-        });
+// Encrypt message with sharedAesKey, return {cipherB64, ivB64}
+async function encryptMessage(plain){
+  if(!sharedAesKey) throw new Error('Shared key not available');
+  const enc = new TextEncoder().encode(plain);
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const cipherBuf = await window.crypto.subtle.encrypt({name:'AES-GCM', iv}, sharedAesKey, enc);
+  return {cipherB64: bufToB64(cipherBuf), ivB64: bufToB64(iv)};
+}
 
-        // --- Receiving Messages ---
-        socket.on('chat message', function(data) {
-            appendMessage(data.user, data.msg);
-        });
-        
-        // --- Status Messages ---
-        socket.on('status message', function(msg) {
-            appendMessage('', msg, true);
-        });
+async function decryptMessage(cipherB64, ivB64){
+  if(!sharedAesKey) throw new Error('Shared key not available');
+  const cipherBuf = b64ToBuf(cipherB64);
+  const iv = new Uint8Array(b64ToBuf(ivB64));
+  try{
+    const plainBuf = await window.crypto.subtle.decrypt({name:'AES-GCM', iv}, sharedAesKey, cipherBuf);
+    return new TextDecoder().decode(plainBuf);
+  }catch(e){
+    return '[Decrypt failed]';
+  }
+}
 
-    </script>
-</body>
+// Storage helpers
+function loadMessages(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return [];
+  try{return JSON.parse(raw);}catch(e){return []}
+}
+function saveMessages(arr){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+// Render chat area: decrypt messages when possible
+async function renderChat(){
+  chatArea.innerHTML = '';
+  const msgs = loadMessages();
+  for (const m of msgs){
+    const div = document.createElement('div');
+    div.className = 'msg ' + (m.sender === (displayName.value||'Me') ? 'me' : 'them');
+    let text = m.plain || null;
+    if(!text){
+      if(sharedAesKey){
+        try{ text = await decryptMessage(m.ciphertext, m.iv); }
+        catch(e){ text = '[Unable to decrypt]'; }
+      } else { text = '[Encrypted message — import peer key to decrypt]'; }
+    }
+    div.innerHTML = `<div style="font-weight:600">${m.sender}</div><div style="margin-top:6px">${escapeHtml(text)}</div><div class="small" style="margin-top:6px">${new Date(m.t).toLocaleString()}</div>`;
+    chatArea.appendChild(div);
+  }
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function escapeHtml(s){return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')}
+
+// Send message: encrypt and store
+sendBtn.addEventListener('click', async ()=>{
+  const txt = msgInput.value.trim();
+  if(!txt) return;
+  const name = displayName.value.trim() || 'Me';
+  try{
+    if(!sharedAesKey) { alert('Shared key नहीं बनी — पहले keys generate और import करो'); return }
+    const enc = await encryptMessage(txt);
+    const msgs = loadMessages();
+    const obj = { id: Date.now()+Math.random(), sender: name, ciphertext: enc.cipherB64, iv: enc.ivB64, t: Date.now() };
+    msgs.push(obj);
+    saveMessages(msgs);
+    msgInput.value = '';
+    await renderChat();
+  }catch(e){console.error(e);alert('Send failed: '+e.message)}
+});
+
+// Backup / Restore
+backupBtn.addEventListener('click', ()=>{
+  const data = localStorage.getItem(STORAGE_KEY) || '[]';
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'e2e_chat_backup.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+restoreBtn.addEventListener('click', ()=>fileIn.click());
+fileIn.addEventListener('change', ()=>{
+  const f = fileIn.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{ const arr = JSON.parse(reader.result); saveMessages(arr); renderChat(); alert('Restore done'); }
+    catch(e){ alert('Restore failed: invalid file') }
+  };
+  reader.readAsText(f);
+});
+
+// On load: try to populate public key if saved
+window.addEventListener('load', async ()=>{
+  const savedPub = localStorage.getItem('e2e_my_pub_b64');
+  if(savedPub){ pubOut.textContent = savedPub; copyPub.style.display='inline-block'; exportPubBtn.style.display='inline-block'; myPubRawB64 = savedPub; }
+  await renderChat();
+});
+
+// For quick demo: allow double-click on pubOut to copy
+pubOut.addEventListener('dblclick', ()=>{ if(myPubRawB64) navigator.clipboard.writeText(myPubRawB64) });
+
+</script></body>
 </html>
